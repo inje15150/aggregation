@@ -30,6 +30,8 @@ public class AggregationApi {
     public final static int PORT = 9200;
     static final Logger log = LogManager.getLogger(AggregationApi.class);
     private final Gson gson = new Gson();
+    private final static String REQUEST = "REQUEST";
+    private final static String SETTINGS = "SETTINGS";
     private final static String OK = "OK";
     private final static String ERROR = "ERROR";
     private final static String NOT_FOUND = "NOT_FOUND";
@@ -53,12 +55,13 @@ public class AggregationApi {
                                 .gte(gte)
                                 .lt(lt)
                         )); // 10분, 1시간, 1일 별 gte, lt 값 부여
-        log.info("Set the range to aggregation. [{} ~ {}]", gte, lt);
+        log.info("[{}] Set the range to aggregation. [{}] ~ [{}]", SETTINGS, gte, lt);
         // 집계 쿼리 메서드 호출
         SearchSourceBuilder query = addAggQuery(searchSourceBuilder);
 
         searchRequest.source(query); // query 를 source(body)에 넣기
         SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT); // 실제 search 쿼리 전달
+        log.info("[{}] Aggregation query forwarding.", REQUEST);
 
         int status = response.status().getStatus();
         if (status == 201) {
@@ -108,24 +111,24 @@ public class AggregationApi {
 
         // 각 노드 별 데이터 파싱 하기 위한 반복
         for (Aggregation agg : aggregationList) {
-            ParsedFilter parsedFilter = (ParsedFilter) agg; // Filter 타입 반환 -> ParsedFilter 타입 캐스팅
-            ParsedStats cpuStats = (ParsedStats) parsedFilter.getAggregations().getAsMap().get("cpu");
-            ParsedStats memoryStats = (ParsedStats) parsedFilter.getAggregations().getAsMap().get("memory");
+            ParsedFilter parsedFilter = (ParsedFilter) agg; // "fieldName" : "Map"
+            ParsedStats cpuStats = (ParsedStats) parsedFilter.getAggregations().getAsMap().get("cpu"); // "cpu" : "stats"
+            ParsedStats memoryStats = (ParsedStats) parsedFilter.getAggregations().getAsMap().get("memory"); // "memory" : "stats"
 
             // ParsedFilter 변수 gson 활용하여 Cpu, Memory class 형태로 파싱
             String cpuToJson = gson.toJson(cpuStats);
             cpu = gson.fromJson(cpuToJson, Cpu.class);
-            log.info("[{}] Parsing cpu aggregate data", agg.getName());
+            log.info("[{}] [{}] Parsing cpu aggregate data", OK, agg.getName());
 
             String memoryToJson = gson.toJson(memoryStats);
             memory = gson.fromJson(memoryToJson, Memory.class);
-            log.info("[{}] Parsing memory aggregate data", agg.getName());
+            log.info("[{}] [{}] Parsing memory aggregate data", OK, agg.getName());
 
             // Total 객체 생성자 시점에 데이터 넣기
             Total total = new Total(cpu, memory, nowDate());
 
             nodeNameMap.put(agg.getName(), total);
-            log.info("data parsing success.");
+            log.info("[{}] data parsing success.", OK);
         }
         return nodeNameMap;
     }

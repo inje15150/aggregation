@@ -18,6 +18,7 @@ public class TenMinThread extends Thread {
     public void run() {
         while (true) {
             try {
+                long start = System.currentTimeMillis();
                 WantDateCreate dateCreate = new WantDateCreate();
                 Aggregation aggregation = new Aggregation();
 
@@ -27,8 +28,11 @@ public class TenMinThread extends Thread {
                     aggregation.aggregation("ten_minute", dateCreate.min_fieldName(), dateCreate.typeName(), dateCreate.min_gte(), dateCreate.min_lt());
                 }
                 retryCount = 0;
+
+                long end = System.currentTimeMillis();
+                long diffTime = end - start;
 //                noinspection BusyWait
-                Thread.sleep(600000);
+                Thread.sleep(600000 - diffTime);
             } catch (InterruptedException e) {
                 log.error(e.getMessage());
                 break;

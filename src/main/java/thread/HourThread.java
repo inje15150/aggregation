@@ -17,6 +17,7 @@ public class HourThread extends Thread {
     public void run() {
         while (true) {
             try {
+                long start = System.currentTimeMillis();
                 WantDateCreate dateCreate = new WantDateCreate();
                 Aggregation aggregation = new Aggregation();
 
@@ -25,8 +26,12 @@ public class HourThread extends Thread {
                 } else {
                     aggregation.aggregation("hour", dateCreate.hour_fieldName(), dateCreate.typeName(), dateCreate.hour_gte(), dateCreate.hour_lt());
                 }
+
+                retryCount = 0;
+                long end = System.currentTimeMillis();
+                long diffTime = end - start;
                 //noinspection BusyWait
-                Thread.sleep(3600000);
+                Thread.sleep(3600000 - diffTime);
             } catch (InterruptedException e) {
                 log.error(e.getMessage());
                 break;

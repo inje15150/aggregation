@@ -18,15 +18,20 @@ public class DayThread extends Thread {
     public void run() {
         while (true) {
             try {
+                long start = System.currentTimeMillis();
                 WantDateCreate dateCreate = new WantDateCreate();
                 Aggregation aggregation = new Aggregation();
 
+                // daily aggregation 01시 쯤 insert
                 if (dateCreate.day_agg_time().equals("01")) {
                     aggregation.aggregation("day", dateCreate.day_fieldName(), dateCreate.lastTypename(), dateCreate.day_gte(), dateCreate.day_lt());
-                } else {
-                    //noinspection BusyWait
-                    Thread.sleep(3600000);
                 }
+
+                retryCount = 0;
+                long end = System.currentTimeMillis();
+                long diffTime = end - start;
+                //noinspection BusyWait
+                Thread.sleep(3600000 - diffTime);
             } catch (InterruptedException e) {
                 log.error(e.getMessage());
                 break;
