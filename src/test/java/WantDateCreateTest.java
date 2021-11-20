@@ -1,9 +1,26 @@
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 
 public class WantDateCreateTest {
+
+    public synchronized List<String> hourTimeRangeList() {
+        List<String> hourList = new ArrayList<>();
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(new Date(2021, Calendar.DECEMBER, 20, 0, 7, 10));
+        cal.add(Calendar.DATE, -1);
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH");
+
+        for (int i = 0; i <= 24; i++) {
+            hourList.add(df.format(cal.getTime()) + ":00:00");
+            cal.add(Calendar.HOUR, +1);
+        }
+
+        return hourList;
+    }
 
     // 타입명 추출
     public synchronized String typeName() {

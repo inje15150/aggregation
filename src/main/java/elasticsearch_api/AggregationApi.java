@@ -4,15 +4,18 @@ import com.google.gson.Gson;
 import entity.Cpu;
 import entity.Memory;
 import entity.Total;
+import org.apache.http.HttpStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.aggregations.*;
-import org.elasticsearch.search.aggregations.bucket.filter.ParsedFilter;
+import org.elasticsearch.search.aggregations.bucket.significant.ParsedSignificantTerms;
 import org.elasticsearch.search.aggregations.metrics.stats.ParsedStats;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.aggregations.Aggregation;
@@ -38,9 +41,9 @@ public class AggregationApi {
     private final static String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
 
     // 10분 단위 cpu sum, avg, max, min, count
-    public Map<String, Total> aggregation(RestHighLevelClient client, String gte, String lt, String typeName, String fieldName) throws IOException {
+    public Map<String, Total> aggregation(RestHighLevelClient client, String gte, String lt, String agentInfoTypeName, String fieldName) throws IOException {
         SearchRequest searchRequest = new SearchRequest(AGENT_INFO_INDEX_NAME);
-        searchRequest.types(typeName);
+        searchRequest.types(agentInfoTypeName);
 
         // 집계 쿼리 보낼 검색소스 빌더 생성
         SearchSourceBuilder search = new SearchSourceBuilder();
@@ -54,82 +57,86 @@ public class AggregationApi {
                                 .rangeQuery("event_time")
                                 .gte(gte)
                                 .lt(lt)
-                        )); // 10분, 1시간, 1일 별 gte, lt 값 부여
+                        )
+                ); // 10분, 1시간, 1일 별 gte, lt 값 부여
         log.info("[{}] Set the range to aggregation. [{}] ~ [{}]", SETTINGS, gte, lt);
         // 집계 쿼리 메서드 호출
         SearchSourceBuilder query = addAggQuery(searchSourceBuilder);
 
-        searchRequest.source(query); // query 를 source(body)에 넣기
+        searchRequest.source(query);// query 를 source(body)에 넣기
+
         SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT); // 실제 search 쿼리 전달
         log.info("[{}] Aggregation query forwarding.", REQUEST);
 
         int status = response.status().getStatus();
-        if (status == 201) {
-            log.info("[{}] [{}/{}] : agent_info aggregation success !!", OK,typeName, fieldName );
-        } else if (status == 404) {
-            log.error("[{}] [{}/{}] [{}]/Status:[{}] error", ERROR,typeName, fieldName, NOT_FOUND, status);
-        } else if (status == 500) {
-            log.error("[{}] [{}/{}] [{}]/Status:[{}] error", ERROR, typeName, fieldName, INTERNAL_SERVER_ERROR, status);
+        if (status == HttpStatus.SC_OK) {
+            log.info("[{}] [{}/{}] : agent_info aggregation success !!", OK, agentInfoTypeName, fieldName);
+        } else if (status == HttpStatus.SC_NOT_FOUND) {
+            log.error("[{}] [{}/{}] [{}]/Status:[{}] error", ERROR,agentInfoTypeName, fieldName, NOT_FOUND, status);
+            throw new ElasticsearchStatusException("Elasticsearch response status error.", RestStatus.NOT_FOUND);
+        } else if (status == HttpStatus.SC_INTERNAL_SERVER_ERROR) {
+            log.error("[{}] [{}/{}] [{}]/Status:[{}] error", ERROR, agentInfoTypeName, fieldName, INTERNAL_SERVER_ERROR, status);
+            throw new ElasticsearchStatusException("Elasticsearch response status error.", RestStatus.NOT_FOUND);
         }
 
         Aggregations aggregations = response.getAggregations(); // 응답 값 Aggregations 객체 타입으로 반환
 
-        return aggregationResponse(aggregations, gson, fieldName);
+        return aggregationResponse(aggregations, gson);
     }
 
     // 각 agent 별 반복 쿼리 메서드
     private SearchSourceBuilder addAggQuery(SearchSourceBuilder query) {
-        for (String host : ES_HOST) { // 3개 노드 반복 쿼리
-            String fieldName = null;
-            if (host.equals("192.168.60.80")) {
-                fieldName = FIELD_NAME[0];
-            } else if (host.equals("192.168.60.81")) {
-                fieldName = FIELD_NAME[1];
-            } else {
-                fieldName = FIELD_NAME[2];
-            }
-            query.aggregation(AggregationBuilders
-                    .filter(fieldName, QueryBuilders
-                            .termQuery("ip", host))
-                    .subAggregation(AggregationBuilders
-                            .stats("cpu")
-                            .field("cpu"))
-                    .subAggregation(AggregationBuilders
-                            .stats("memory")
-                            .field("memory")));
-        }
+   // 3개 노드 반복 쿼리
+        // TODO: 2021-11-17
+        query.aggregation(AggregationBuilders
+                .significantTerms("cpu_mem_agg")
+                .field("ip.keyword")
+                .subAggregation(AggregationBuilders
+                        .stats("cpu")
+                        .field("cpu"))
+                .subAggregation(AggregationBuilders
+                        .stats("memory")
+                        .field("memory"))
+        );
+
         log.info("Determining which data to aggregation");
         return query;
     }
 
     // aggregation 응답 값 파싱 후 CpuAggregation, MemoryAggregation 객체에 담기
-    private Map<String, Total> aggregationResponse(Aggregations aggregations, Gson gson, String fieldName) {
-        List<Aggregation> aggregationList = aggregations.asList(); // aggregation list
+    private Map<String, Total> aggregationResponse(Aggregations aggregations, Gson gson) {
+        Map<String, Aggregation> asMap = aggregations.getAsMap();
         Map<String, Total> nodeNameMap = new ConcurrentHashMap<>(); // {"node 이름" : "total 데이터"} 형태로 담을 map 생성
-        Cpu cpu = new Cpu(); // 집계 된 CPU 데이터 담을 객체 생성
-        Memory memory = new Memory(); // 집계 된 Memory 데이터 담을 객체 생성
 
-        // 각 노드 별 데이터 파싱 하기 위한 반복
-        for (Aggregation agg : aggregationList) {
-            ParsedFilter parsedFilter = (ParsedFilter) agg; // "fieldName" : "Map"
-            ParsedStats cpuStats = (ParsedStats) parsedFilter.getAggregations().getAsMap().get("cpu"); // "cpu" : "stats"
-            ParsedStats memoryStats = (ParsedStats) parsedFilter.getAggregations().getAsMap().get("memory"); // "memory" : "stats"
+        ParsedSignificantTerms cpu_mem_agg = (ParsedSignificantTerms) asMap.get("cpu_mem_agg");
+        cpu_mem_agg.getBuckets().iterator().forEachRemaining(
+                bucket -> {
+                    Cpu cpu = new Cpu(); // 집계 된 CPU 데이터 담을 객체 생성
+                    Memory memory = new Memory(); // 집계 된 Memory 데이터 담을 객체 생성
 
-            // ParsedFilter 변수 gson 활용하여 Cpu, Memory class 형태로 파싱
-            String cpuToJson = gson.toJson(cpuStats);
-            cpu = gson.fromJson(cpuToJson, Cpu.class);
-            log.info("[{}] [{}] Parsing cpu aggregate data", OK, agg.getName());
+                    String key = (String) bucket.getKey();
+                    ParsedStats cpuStats = (ParsedStats) bucket.getAggregations().getAsMap().get("cpu");
+                    ParsedStats memoryStats = (ParsedStats) bucket.getAggregations().getAsMap().get("memory");
 
-            String memoryToJson = gson.toJson(memoryStats);
-            memory = gson.fromJson(memoryToJson, Memory.class);
-            log.info("[{}] [{}] Parsing memory aggregate data", OK, agg.getName());
+                    String cpuToJson = gson.toJson(cpuStats);
+                    cpu = gson.fromJson(cpuToJson, Cpu.class);
+                    cpu.rounds();
 
-            // Total 객체 생성자 시점에 데이터 넣기
-            Total total = new Total(cpu, memory, nowDate());
+                    log.info("[{}] [{}] Parsing cpu aggregate data", OK, key);
 
-            nodeNameMap.put(agg.getName(), total);
-            log.info("[{}] data parsing success.", OK);
-        }
+                    String memoryToJson = gson.toJson(memoryStats);
+                    memory = gson.fromJson(memoryToJson, Memory.class);
+                    memory.rounds();
+
+                    log.info("[{}] [{}] Parsing memory aggregate data", OK, key);
+
+                    // Total 객체 생성자 시점에 데이터 넣기
+                    Total total = new Total(cpu, memory, nowDate());
+
+                    nodeNameMap.put(key, total);
+                    log.info("[{}] data parsing success.", OK);
+                }
+        );
         return nodeNameMap;
     }
 

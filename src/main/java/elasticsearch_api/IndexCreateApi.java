@@ -43,8 +43,8 @@ public class IndexCreateApi {
         log.info("[{}/{}] index settings complete.", indexName, typeName);
         log.info("settings : shards : {}, replica : {}", SHARDS, REPLICA);
 
-        indexMappings(putMappingRequest, typeName, fieldName);// 인덱스 필드 매핑
-        log.info("index mapping complete.");
+//        indexMappings(putMappingRequest, typeName, fieldName);// 인덱스 필드 매핑
+//        log.info("index mapping complete.");
     }
 
     //Settings
@@ -62,7 +62,7 @@ public class IndexCreateApi {
     }
 
     //Mapping
-    public void indexMappings(PutMappingRequest putMappingRequest, String typeName, String fieldName) {
+    public void indexMappings(PutMappingRequest putMappingRequest, String typeName, String fieldName, String id, String node_name, String dateFieldName) {
         try {
             XContentBuilder builder = null;
 
@@ -70,10 +70,13 @@ public class IndexCreateApi {
             builder.startObject()
                     .startObject(typeName)
                         .startObject("properties")
-                            .startObject("id")
+                            .startObject(id)
+                                .field("type", "keyword")
+                            .endObject()
+                            .startObject(node_name)
                                 .field("type", "text")
                             .endObject()
-                            .startObject("data")
+                            .startObject(dateFieldName)
                                 .startObject("properties")
                                     .startObject(fieldName)
                                         .startObject("properties")// type name

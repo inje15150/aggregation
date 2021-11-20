@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.client.RequestOptions;
@@ -22,8 +23,12 @@ public class InsertDocumentApi {
     private final static String NOT_FOUND = "NOT_FOUND";
     private final static String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
 
+    public void insert(RestHighLevelClient client, Map<String, Object> map, String indexName, String typeName, String nodeName, String fieldName, String id, String dateFieldName) throws IOException {
 
-    public void documentCreate(RestHighLevelClient client, Map<String, Object> map, String indexName, String typeName, String nodeName) throws IOException {
+        IndexCreateApi indexCreateApi = new IndexCreateApi(client);
+
+        // update 시 마다 field name 바뀌기 때문에 새로운 필드 매핑 추가
+        indexCreateApi.indexMappings(new PutMappingRequest(indexName).type(typeName), typeName, fieldName, id, nodeName, dateFieldName);
 
         IndexRequest request = new IndexRequest(indexName, typeName); // request 객체 생성
 
