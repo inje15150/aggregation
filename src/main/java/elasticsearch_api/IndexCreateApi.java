@@ -34,7 +34,7 @@ public class IndexCreateApi {
     }
 
     //Create Index
-    public void createIndex(String indexName, String typeName, String fieldName) {
+    public void createIndex(String indexName, String typeName) {
         indexRequest = new CreateIndexRequest(indexName); // index 생성 객체
         putMappingRequest = new PutMappingRequest(indexName); // mapping 객체 생성
         putMappingRequest.type(typeName);
@@ -62,7 +62,7 @@ public class IndexCreateApi {
     }
 
     //Mapping
-    public void indexMappings(PutMappingRequest putMappingRequest, String typeName, String fieldName, String id, String node_name, String dateFieldName) {
+    public void indexMappings(PutMappingRequest putMappingRequest, String typeName, String fieldName, String id, String node_name) {
         try {
             XContentBuilder builder = null;
 
@@ -76,14 +76,15 @@ public class IndexCreateApi {
                             .startObject(node_name)
                                 .field("type", "text")
                             .endObject()
-                            .startObject(dateFieldName)
-                                .startObject("properties")
-                                    .startObject(fieldName)
-                                        .startObject("properties")// type name
-                                            .startObject("event_time")
-                                                .field("type", "date")
-                                                .field("format", "yyyy-MM-dd HH:mm:ss||yyyy/MM/dd HH:mm:ss||epoch_millis")
-                                            .endObject();
+                            .startObject("day")
+                                .field("type", "text")
+                            .endObject()
+                                .startObject(fieldName)
+                                    .startObject("properties")// type name
+                                        .startObject("event_time")
+                                            .field("type", "date")
+                                            .field("format", "yyyy-MM-dd HH:mm:ss||yyyy/MM/dd HH:mm:ss||epoch_millis")
+                                        .endObject();
 
             for (String inner_field : INNER_FIELD_NAME) { // node 별 field name
                 builder.startObject(inner_field)
@@ -107,8 +108,6 @@ public class IndexCreateApi {
                         .endObject();
             }
             builder.endObject()
-                    .endObject()
-                    .endObject()
                     .endObject()
                     .endObject()
                     .endObject()

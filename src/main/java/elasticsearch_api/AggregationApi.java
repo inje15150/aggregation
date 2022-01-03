@@ -28,7 +28,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AggregationApi {
 
     public final static String[] ES_HOST = {"192.168.60.80", "192.168.60.81", "192.168.60.82"};
-    public final static String[] FIELD_NAME = {"node1", "node2", "node3"};
     private final static String AGENT_INFO_INDEX_NAME = "agent_info";
     public final static int PORT = 9200;
     static final Logger log = LogManager.getLogger(AggregationApi.class);
@@ -41,7 +40,7 @@ public class AggregationApi {
     private final static String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
 
     // 10분 단위 cpu sum, avg, max, min, count
-    public Map<String, Total> aggregation(RestHighLevelClient client, String gte, String lt, String agentInfoTypeName, String fieldName) throws IOException {
+    public Map<String, Total> aggregation(RestHighLevelClient client, String gte, String lt, String agentInfoTypeName, String fieldName, List<String> keys) throws IOException {
         SearchRequest searchRequest = new SearchRequest(AGENT_INFO_INDEX_NAME);
         searchRequest.types(agentInfoTypeName);
 
@@ -58,12 +57,14 @@ public class AggregationApi {
                                 .gte(gte)
                                 .lt(lt)
                         )
+                        .filter(QueryBuilders
+                                .termsQuery("ip", keys.get(0), keys.get(1), keys.get(2)))
                 ); // 10분, 1시간, 1일 별 gte, lt 값 부여
         log.info("[{}] Set the range to aggregation. [{}] ~ [{}]", SETTINGS, gte, lt);
         // 집계 쿼리 메서드 호출
         SearchSourceBuilder query = addAggQuery(searchSourceBuilder);
 
-        searchRequest.source(query);// query 를 source(body)에 넣기
+        searchRequest.source(query); // query 를 source(body)에 넣기
 
         SearchResponse response = client.search(searchRequest, RequestOptions.DEFAULT); // 실제 search 쿼리 전달
         log.info("[{}] Aggregation query forwarding.", REQUEST);
@@ -81,7 +82,7 @@ public class AggregationApi {
 
         Aggregations aggregations = response.getAggregations(); // 응답 값 Aggregations 객체 타입으로 반환
 
-        return aggregationResponse(aggregations, gson);
+        return aggregationResponse(aggregations, gson, keys);
     }
 
     // 각 agent 별 반복 쿼리 메서드
@@ -104,28 +105,28 @@ public class AggregationApi {
     }
 
     // aggregation 응답 값 파싱 후 CpuAggregation, MemoryAggregation 객체에 담기
-    private Map<String, Total> aggregationResponse(Aggregations aggregations, Gson gson) {
+    private Map<String, Total> aggregationResponse(Aggregations aggregations, Gson gson, List<String> keys) {
         Map<String, Aggregation> asMap = aggregations.getAsMap();
         Map<String, Total> nodeNameMap = new ConcurrentHashMap<>(); // {"node 이름" : "total 데이터"} 형태로 담을 map 생성
 
         ParsedSignificantTerms cpu_mem_agg = (ParsedSignificantTerms) asMap.get("cpu_mem_agg");
         cpu_mem_agg.getBuckets().iterator().forEachRemaining(
-                bucket -> {
-                    Cpu cpu = new Cpu(); // 집계 된 CPU 데이터 담을 객체 생성
-                    Memory memory = new Memory(); // 집계 된 Memory 데이터 담을 객체 생성
-
+            bucket -> {
+//                    Cpu cpu = new Cpu(); // 집계 된 CPU 데이터 담을 객체 생성
+//                    Memory memory = new Memory(); // 집계 된 Memory 데이터 담을 객체 생성
+                if ((keys.contains((String) bucket.getKey()))) {
                     String key = (String) bucket.getKey();
                     ParsedStats cpuStats = (ParsedStats) bucket.getAggregations().getAsMap().get("cpu");
                     ParsedStats memoryStats = (ParsedStats) bucket.getAggregations().getAsMap().get("memory");
 
                     String cpuToJson = gson.toJson(cpuStats);
-                    cpu = gson.fromJson(cpuToJson, Cpu.class);
+                    Cpu cpu = gson.fromJson(cpuToJson, Cpu.class);
                     cpu.rounds();
 
                     log.info("[{}] [{}] Parsing cpu aggregate data", OK, key);
 
                     String memoryToJson = gson.toJson(memoryStats);
-                    memory = gson.fromJson(memoryToJson, Memory.class);
+                    Memory memory = gson.fromJson(memoryToJson, Memory.class);
                     memory.rounds();
 
                     log.info("[{}] [{}] Parsing memory aggregate data", OK, key);
@@ -136,6 +137,7 @@ public class AggregationApi {
                     nodeNameMap.put(key, total);
                     log.info("[{}] data parsing success.", OK);
                 }
+            }
         );
         return nodeNameMap;
     }

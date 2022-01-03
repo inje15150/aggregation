@@ -14,6 +14,8 @@ public class Total {
         this.cpu = cpu;
         this.memory = memory;
         this.event_time = event_time;
+    }
 
+    public Total() {
     }
 }

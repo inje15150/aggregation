@@ -2,23 +2,23 @@ package date;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
+import java.util.*;
 
 public class WantDateCreate {
 
     public synchronized List<String> hourTimeRangeList() {
-        List<String> hourList = new ArrayList<>();
+        List<String> hourList = Collections.synchronizedList(new ArrayList<>());
         Calendar cal = Calendar.getInstance();
         cal.setTime(new Date());
         cal.add(Calendar.DATE, -1);
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH");
 
-        for (int i = 0; i <= 24; i++) {
-            hourList.add(df.format(cal.getTime()) + ":00:00");
-            cal.add(Calendar.HOUR, +1);
+        // 00:00:00 ~ 익일 00:00:00
+        synchronized (hourList) {
+            for (int i = 0; i <= 24; i++) {
+                hourList.add(df.format(cal.getTime()) + ":00:00");
+                cal.add(Calendar.HOUR, +1);
+            }
         }
         return hourList;
     }

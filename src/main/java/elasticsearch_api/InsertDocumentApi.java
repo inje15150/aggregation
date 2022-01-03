@@ -28,7 +28,7 @@ public class InsertDocumentApi {
         IndexCreateApi indexCreateApi = new IndexCreateApi(client);
 
         // update 시 마다 field name 바뀌기 때문에 새로운 필드 매핑 추가
-        indexCreateApi.indexMappings(new PutMappingRequest(indexName).type(typeName), typeName, fieldName, id, nodeName, dateFieldName);
+        indexCreateApi.indexMappings(new PutMappingRequest(indexName).type(typeName), typeName, fieldName, id, nodeName);
 
         IndexRequest request = new IndexRequest(indexName, typeName); // request 객체 생성
 

@@ -3,6 +3,7 @@ package schedule;
 
 import aggregation.Aggregation;
 import date.WantDateCreate;
+import elasticsearch_api.Connection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchStatusException;
@@ -14,6 +15,11 @@ public class DayAggregation {
     private final Logger log = LogManager.getLogger(DayAggregation.class);
     private int retryCount = 0;
     private final static String FINISH = "FINISH";
+    private Connection connection;
+
+    public DayAggregation(Connection connection) {
+        this.connection = connection;
+    }
 
     public void dayAggregation() throws IOException {
         try {
@@ -24,7 +30,7 @@ public class DayAggregation {
 
             retryCount = 0;
 
-        } catch (IOException | ElasticsearchStatusException e) {
+        } catch (IOException | ElasticsearchStatusException | IllegalArgumentException e) {
             log.error(e.getMessage());
 
 // IOException, ElasticsearchStatusException 발생 시 5회 retry
